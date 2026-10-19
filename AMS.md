@@ -141,4 +141,86 @@ CachedAppOptimizer 组件用于管理缓存进程的优化以减少其内存占�
 
 源代码：
 
-[core/java/com/android/server/am/CachedAppOptimizer.java](https://cs.android.com/android/platform/superproject/+/android-latest-release:frameworks/base/services/core/java/com/android/server/am/CachedAppOptimizer.java)
+* [core/java/com/android/server/am/CachedAppOptimizer.java](https://cs.android.com/android/platform/superproject/+/android-latest-release:frameworks/base/services/core/java/com/android/server/am/CachedAppOptimizer.java)
+
+## 进程能力
+Android 11引入了进程能力的概念，用于定义进程可以执行的敏感操作。
+
+|能力  | 描述 |
+|-------|-------|
+|**PROCESS_CAPABILITY_FOREGROUND_LOCATION**|在前台时可访问地理位置|
+|**PROCESS_CAPABILITY_FOREGROUND_CAMERA**|可访问摄像头|
+|**PROCESS_CAPABILITY_FOREGROUND_MICROPHONE**|可访问麦克风|
+|**PROCESS_CAPABILITY_FOREGROUND_AUDIO_CONTROL**|可控制音量|
+|**PROCESS_CAPABILITY_BFSL**|可从后台启动前台服务|
+|**PROCESS_CAPABILITY_POWER_RESTRICTED_NETWORK**|电量限制模式时可访问网络|
+|**PROCESS_CAPABILITY_USER_RESTRICTED_NETWORK**|用户受限时可访问访问|
+
+能力根据以下依据授予:
+1. 进程状态（高状态具有更多能力）
+2. 服务类型（例如：前台服务具有摄像头类型的剧有获取相机的能力）
+3. 绑定关系（能力可以从客户端传递到服务端）
+
+源代码：
+* [core/java/android/app/ActivityManager.java](https://cs.android.com/android/platform/superproject/+/android-latest-release:frameworks/base/core/java/android/app/ActivityManager.java)
+* [core/java/com/android/server/am/psc/OomAdjuster.java](https://cs.android.com/android/platform/superproject/+/android-latest-release:frameworks/base/services/core/java/com/android/server/am/psc/OomAdjuster.java) 
+
+## 服务管理
+服务是可以在后台运行且无用户界面的组件，他们对进程优先级有重要影响：
+1. **前台服务**：接收高优先级的临近可见Activities
+2. **绑定服务**：继承绑定客户端的优先级
+3. **后台服务**：以较低优先级运行
+
+![process capabilities](./assets/2.1-process-capabilities.png)
+
+源代码
+* [services/core/java/com/android/server/am/ActiveServices.java](https://cs.android.com/android/platform/superproject/+/android-latest-release:frameworks/base/services/core/java/com/android/server/am/ActiveServices.java)
+
+### 前台服务限制
+Android对应用启动前台服务的权限进行了越来越多的限制，尤其是从后台启动时。主要限制包括：
+1. 后台应用需要特殊权限才能启动前台应用
+2. 某些前台服务类型（如相机、位置、麦克风）有额外的限制
+3. 短时前台服务有时间限制
+
+源代码：
+* [services/core/java/com/android/server/am/ActiveServices.java](https://cs.android.com/android/platform/superproject/+/android-latest-release:frameworks/base/services/core/java/com/android/server/am/ActiveServices.java)
+* [services/core/java/com/android/server/am/ActivityManagerConstants.java](https://cs.android.com/android/platform/superproject/+/android-latest-release:frameworks/base/services/core/java/com/android/server/am/ActivityManagerConstants.java)
+
+## 高级主题
+### 进程启动序列
+
+源代码：
+* [core/java/com/android/server/am/ProcessList.java](https://cs.android.com/android/platform/superproject/+/android-latest-release:frameworks/base/services/core/java/com/android/server/am/ProcessList.java)
+* [services/core/java/com/android/server/am/ActivityManagerService.java](https://cs.android.com/android/platform/superproject/+/android-latest-release:frameworks/base/services/core/java/com/android/server/am/ActivityManagerService.java)
+* [services/core/java/com/android/server/am/AppStartInfoTracker.java](https://cs.android.com/android/platform/superproject/+/android-latest-release:frameworks/base/services/core/java/com/android/server/am/AppStartInfoTracker.java)
+
+### UI兼容模式
+当某个Activity在与设计尺寸或方向不同的屏幕上运行时，Android可能会启动兼容模式：
+1. Activity以与预期尺寸相匹配的虚拟显示尺寸运行
+2. 内容可能会被缩放以适应物理显示
+3. 不同显示设备的固定方向应用需特殊处理
+
+这确保了专为特定屏幕尺寸设计的应用仍能在其他屏幕尺寸上正常运行。
+
+源代码：
+* [services/tests/wmtests/src/com/android/server/wm/SizeCompatTests.java](https://cs.android.com/android/platform/superproject/+/android-latest-release:frameworks/base/services/tests/wmtests/src/com/android/server/wm/SizeCompatTests.java)
+* [services/core/java/com/android/server/wm/ActivityRecord.java](https://cs.android.com/android/platform/superproject/+/android-latest-release:frameworks/base/services/core/java/com/android/server/wm/ActivityRecord.java)
+
+### 壁纸管理
+显示壁纸的Activities会做特殊处理：
+1. 壁纸进程会获得更高的优先级
+2. 壁纸与Activities的可见性相一致
+3. 在切换带有壁纸的Activies时，会应用特殊动画
+
+源代码：
+* [services/core/java/com/android/server/wm/WallpaperController.java](https://cs.android.com/android/platform/superproject/+/android-latest-release:frameworks/base/services/core/java/com/android/server/wm/WallpaperController.java)
+
+### 配置管理
+进程管理系统通过以下方式处理配置变更（如方向、区域设置等）：
+1. 配置更改时重新计算进程的优先级
+2. 管理因配置变更而导致Activity的重建
+3. 处理受配置影响进程能力
+
+源代码：
+* [services/core/java/com/android/server/wm/ActivityRecord.java](https://cs.android.com/android/platform/superproject/+/android-latest-release:frameworks/base/services/core/java/com/android/server/wm/ActivityRecord.java)
+* [core/java/android/content/pm/ActivityInfo.java](https://cs.android.com/android/platform/superproject/+/android-latest-release:frameworks/base/core/java/android/content/pm/ActivityInfo.java)
